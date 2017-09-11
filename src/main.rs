@@ -42,9 +42,10 @@ impl Bodies {
             Body::new_neptune()
         ];
         for i in 1..BODIES {
-            bodies[0].vx -= bodies[i].vx * bodies[i].mass / SOLAR_MASS;
-            bodies[0].vy -= bodies[i].vy * bodies[i].mass / SOLAR_MASS;
-            bodies[0].vz -= bodies[i].vz * bodies[i].mass / SOLAR_MASS;
+            let mass = bodies[i].mass / SOLAR_MASS;
+            bodies[0].vx -= bodies[i].vx * mass;
+            bodies[0].vy -= bodies[i].vy * mass;
+            bodies[0].vz -= bodies[i].vz * mass;
         }
         Bodies { bodies }
     }
@@ -80,13 +81,15 @@ impl Bodies {
                     let d = dx * dx + dy * dy + dz * dz;
                     let mag = TIME_STEP / (d.sqrt() * d);
 
-                    self.bodies[i].vx -= dx * self.bodies[j].mass * mag;
-                    self.bodies[i].vy -= dy * self.bodies[j].mass * mag;
-                    self.bodies[i].vz -= dz * self.bodies[j].mass * mag;
+                    let mass_j = self.bodies[j].mass * mag;
+                    self.bodies[i].vx -= dx * mass_j;
+                    self.bodies[i].vy -= dy * mass_j;
+                    self.bodies[i].vz -= dz * mass_j;
 
-                    self.bodies[j].vx += dx * self.bodies[i].mass * mag;
-                    self.bodies[j].vy += dy * self.bodies[i].mass * mag;
-                    self.bodies[j].vz += dz * self.bodies[i].mass * mag;
+                    let mass_i = self.bodies[i].mass * mag;
+                    self.bodies[j].vx += dx * mass_i;
+                    self.bodies[j].vy += dy * mass_i;
+                    self.bodies[j].vz += dz * mass_i;
                 }
                 self.bodies[i].x += TIME_STEP * self.bodies[i].vx;
                 self.bodies[i].y += TIME_STEP * self.bodies[i].vy;
