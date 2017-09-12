@@ -4,7 +4,6 @@ use simd::x86::sse2::f64x2;
 use std::env;
 use std::f64::consts::PI;
 
-const BODIES: usize = 5;
 const SOLAR_MASS: f64 = 4. * PI * PI;
 const DAYS_PER_YEAR: f64 = 365.24;
 const TIME_STEP: f64 = 0.01;
@@ -20,43 +19,31 @@ fn main() {
     println!("{:.9}", bodies.get_energy());
 }
 
-struct Bodies {
-    bodies: [Body; BODIES]
-}
+struct Bodies(Body, Body, Body, Body, Body);
 
 impl Bodies {
     fn new() -> Self {
-        let mut bodies = [
-            Body::new_sun_no_velocity(),
-            Body::new_jupiter(),
-            Body::new_saturn(),
-            Body::new_uranus(),
-            Body::new_neptune()
-        ];
-        for i in 1..BODIES {
-            bodies[0].vxy = bodies[0].vxy - bodies[i].vxy * f64x2::splat(bodies[i].mass / SOLAR_MASS);
-            bodies[0].vz -= bodies[i].vz * bodies[i].mass / SOLAR_MASS;
-        }
-        Bodies { bodies }
+        Bodies(Body::new_sun(), Body::new_jupiter(), Body::new_saturn(), Body::new_uranus(), Body::new_neptune())
     }
 
     fn get_energy(&self) -> f64 {
         let mut e = 0.;
-        for i in 0..BODIES {
-            let body_i = &self.bodies[i];
+        let bodies = [&self.0, &self.1, &self.2, &self.3, &self.4];
+        for i in 0..bodies.len() {
+            let body_i = bodies[i];
             let vxy_pow = body_i.vxy * body_i.vxy;
             e += 0.5 * body_i.mass * (
                 vxy_pow.extract(0) +
-                vxy_pow.extract(1) +
-                body_i.vz.powi(2));
-            for j in i + 1..BODIES {
-                let body_j = &self.bodies[j];
+                    vxy_pow.extract(1) +
+                    body_i.vz.powi(2));
+            for j in i + 1..bodies.len() {
+                let body_j = bodies[j];
                 let mut dxy = body_i.xy - body_j.xy;
                 dxy = dxy * dxy;
                 let d =
                     dxy.extract(0) +
-                    dxy.extract(1) +
-                    (body_i.z - body_j.z).powi(2);
+                        dxy.extract(1) +
+                        (body_i.z - body_j.z).powi(2);
                 e -= body_i.mass * body_j.mass / d.sqrt();
             }
         }
@@ -65,28 +52,47 @@ impl Bodies {
 
     fn step_time(&mut self, steps: u32) {
         for _ in 0..steps {
-            for i in 0..BODIES {
-                for j in i + 1..BODIES {
-                    let dxy = self.bodies[i].xy - self.bodies[j].xy;
-                    let dz = self.bodies[i].z - self.bodies[j].z;
-
-                    let dxy_2 = dxy * dxy;
-                    let d = dxy_2.extract(0) + dxy_2.extract(1) + dz * dz;
-                    let mag = TIME_STEP / (d.sqrt() * d);
-
-                    let m_j_mag = self.bodies[j].mass * mag;
-                    self.bodies[i].vxy = self.bodies[i].vxy - dxy * f64x2::splat(m_j_mag);
-                    self.bodies[i].vz -= dz * m_j_mag;
-
-                    let m_i_mag = self.bodies[i].mass * mag;
-                    self.bodies[j].vxy = self.bodies[j].vxy + dxy * f64x2::splat(m_i_mag);
-                    self.bodies[j].vz += dz * m_i_mag;
-                }
-                self.bodies[i].xy = self.bodies[i].xy + self.bodies[i].vxy * f64x2::splat(TIME_STEP);
-                self.bodies[i].z += self.bodies[i].vz * TIME_STEP;
-            }
+            update_v(&mut self.0, &mut self.1);
+            update_v(&mut self.0, &mut self.2);
+            update_v(&mut self.0, &mut self.3);
+            update_v(&mut self.0, &mut self.4);
+            update_v(&mut self.1, &mut self.2);
+            update_v(&mut self.1, &mut self.3);
+            update_v(&mut self.1, &mut self.4);
+            update_v(&mut self.2, &mut self.3);
+            update_v(&mut self.2, &mut self.4);
+            update_v(&mut self.3, &mut self.4);
+            update_pos(&mut self.0);
+            update_pos(&mut self.1);
+            update_pos(&mut self.2);
+            update_pos(&mut self.3);
+            update_pos(&mut self.4);
         }
     }
+}
+
+#[inline(always)]
+fn update_v(body_i: &mut Body, body_j: &mut Body) {
+    let dxy = body_i.xy - body_j.xy;
+    let dz = body_i.z - body_j.z;
+
+    let dxy_2 = dxy * dxy;
+    let d = dxy_2.extract(0) + dxy_2.extract(1) + dz * dz;
+    let mag = TIME_STEP / (d.sqrt() * d);
+
+    let m_j_mag = body_j.mass * mag;
+    body_i.vxy = body_i.vxy - dxy * f64x2::splat(m_j_mag);
+    body_i.vz -= dz * m_j_mag;
+
+    let m_i_mag = body_i.mass * mag;
+    body_j.vxy = body_j.vxy + dxy * f64x2::splat(m_i_mag);
+    body_j.vz += dz * m_i_mag;
+}
+
+#[inline(always)]
+fn update_pos(body: &mut Body) {
+    body.xy = body.xy + body.vxy * f64x2::splat(TIME_STEP);
+    body.z += body.vz * TIME_STEP;
 }
 
 struct Body {
@@ -138,12 +144,12 @@ impl Body {
         }
     }
 
-    fn new_sun_no_velocity() -> Self {
+    fn new_sun() -> Self {
         Body {
             xy: f64x2::new(0., 0.),
             z: 0.,
-            vxy: f64x2::new(0., 0.),
-            vz: 0.,
+            vxy: f64x2::new(-3.8766340719874267e-04, -3.2753590371765707e-03),
+            vz: 2.3935734080003002e-05,
             mass: SOLAR_MASS,
         }
     }
